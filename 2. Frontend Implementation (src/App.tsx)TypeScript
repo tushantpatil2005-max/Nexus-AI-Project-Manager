@@ -1,0 +1,112 @@
+import React, { useState, useEffect, createContext, useContext } from 'react';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut, 
+  User 
+} from 'firebase/auth';
+import { 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  where, 
+  orderBy, 
+  setDoc, 
+  doc, 
+  Timestamp,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp
+} from 'firebase/firestore';
+import { auth, db } from './firebase';
+import { 
+  Plus, LogOut, Layout, CheckCircle2, Clock, AlertCircle, 
+  ChevronRight, Sparkles, Trash2, Loader2 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { cn } from './lib/utils';
+import ReactMarkdown from 'react-markdown';
+
+// --- Main App Logic ---
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiBreakdown, setAiBreakdown] = useState<string | null>(null);
+
+  // Auth & User Sync Logic
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        const userRef = doc(db, 'users', u.uid);
+        try {
+          const userSnap = await getDoc(userRef);
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              displayName: u.displayName || 'Anonymous',
+              email: u.email || '',
+              photoURL: u.photoURL || '',
+              role: 'user'
+            });
+          }
+        } catch (e) { console.error(e); }
+        setUser(u);
+      } else { setUser(null); }
+      setLoading(false);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time Projects Subscription
+  useEffect(() => {
+    if (!isAuthReady || !user) return;
+    const q = query(
+      collection(db, 'projects'),
+      where('members', 'array-contains', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, [isAuthReady, user]);
+
+  // Real-time Tasks Subscription
+  useEffect(() => {
+    if (!isAuthReady || !selectedProject) return;
+    const q = query(
+      collection(db, `projects/${selectedProject.id}/tasks`),
+      orderBy('createdAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, [isAuthReady, selectedProject]);
+
+  // AI Breakdown Handler
+  const getAIBreakdown = async (task: any) => {
+    setIsAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/breakdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskTitle: task.title,
+          projectDescription: selectedProject?.description
+        })
+      });
+      const data = await res.json();
+      setAiBreakdown(data.breakdown);
+    } catch (error) { console.error(error); }
+    finally { setIsAiLoading(false); }
+  };
+
+  // ... (UI Rendering Logic with Tailwind & Motion) ...
+}

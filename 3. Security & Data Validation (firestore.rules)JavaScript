@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() { return request.auth != null; }
+    function isOwner(userId) { return isAuthenticated() && request.auth.uid == userId; }
+    
+    // Admin Bootstrapping Logic
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "tushantpatil2005@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+    }
+
+    match /projects/{projectId} {
+      function isMember(data) { return isAuthenticated() && (request.auth.uid == data.ownerId || request.auth.uid in data.members); }
+      
+      allow read: if isMember(resource.data) || isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if (isAuthenticated() && request.auth.uid == resource.data.ownerId) || isAdmin();
+
+      match /tasks/{taskId} {
+        allow read, write: if isMember(get(/databases/$(database)/documents/projects/$(projectId)).data) || isAdmin();
+      }
+    }
+  }
+}

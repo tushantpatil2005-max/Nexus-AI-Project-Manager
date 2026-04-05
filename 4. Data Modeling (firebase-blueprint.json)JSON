@@ -1,0 +1,23 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Task": {
+      "title": "Task",
+      "properties": {
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in-progress", "completed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] }
+      }
+    }
+  }
+}

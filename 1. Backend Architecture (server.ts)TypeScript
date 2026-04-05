@@ -1,0 +1,65 @@
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
+import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  app.use(express.json());
+
+  // AI Task Breakdown API - Demonstrates AI Integration & Backend Security
+  app.post("/api/ai/breakdown", async (req, res) => {
+    const { taskTitle, projectDescription } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Gemini API key not configured" });
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Break down the following task into 3-5 actionable sub-tasks for a project management system.
+        Project context: ${projectDescription}
+        Task: ${taskTitle}
+        
+        Return the sub-tasks as a simple bulleted list.`,
+      });
+
+      res.json({ breakdown: response.text });
+    } catch (error) {
+      console.error("AI Error:", error);
+      res.status(500).json({ error: "Failed to generate task breakdown" });
+    }
+  });
+
+  // Vite middleware for development / Static serving for production
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();
